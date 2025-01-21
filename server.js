@@ -14,20 +14,19 @@ const name = process.env.NAME;
 
 const port = process.env.PORT;
 
+// Place before all other calls to app
+app.set("view engine", "ejs");
+// Place after your existing app.use(express.static(...)) call
+app.set("views", path.join(__dirname, "views"));
+
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, "public")));
 
-// Define a route handler for the root URL ('/')
+// Example of the home route using the layout
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "/views/home.html"));
-});
-
-app.get("/page1", (req, res) => {
-  res.sendFile(path.join(__dirname, "/views/page1.html"));
-});
-
-app.get("/page2", (req, res) => {
-  res.sendFile(path.join(__dirname, "/views/page2.html"));
+  const title = "Home Page";
+  const content = "<h1>Welcome to the Home Page</h1>";
+  res.render("index", { title, content });
 });
 
 // Start the server and listen on the specified port
