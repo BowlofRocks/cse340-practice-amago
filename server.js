@@ -1,144 +1,49 @@
-// Import express using ESM syntax
+// Import required modules using ESM import syntax
 import express from "express";
 import path from "path";
-import { dirname } from "path";
 import { fileURLToPath } from "url";
+// Import all other required modules: Route handlers, Middleware, etc.
+import baseRoute from "./src/routes/index.js";
+import layouts from "./src/middleware/layouts.js";
+import configMode from "./src/middleware/config-mode.js";
+import {
+  notFoundHandler,
+  globalErrorHandler,
+} from "./src/middleware/error-handler.js";
 
+// Get the current file path and directory name
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
-const mode = process.env.MODE || "production";
+// Get environment variables
 const port = process.env.PORT || 3000;
+const mode = process.env.MODE || "production";
 
 // Create an instance of an Express application
 const app = express();
 
-// Set the view engine to EJS
+// WITH THIS:
+app.use("/css", express.static(path.join(__dirname, "public/css")));
+app.use("/js", express.static(path.join(__dirname, "public/js")));
+app.use("/images", express.static(path.join(__dirname, "public/images")));
+// Set EJS as the view engine and record the location of the views directory
 app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "src/views"));
 
-// Register the 'public' directory to serve static files
-app.use(express.static(path.join(__dirname, "public")));
+app.use(configMode);
+app.use(layouts);
 
-// Global middleware to handle current mode (development or production)
-app.use((req, res, next) => {
-  req.devModeEnabled = mode.includes("dev"); // New helper property to check if in dev mode
-  res.locals.devModeWarning =
-    '<p class="dev-mode-msg">Warning: Development Mode Enabled</p>'; // Placeholder for a dev mode warning
-  res.locals.scripts = []; // Placeholder for front-end scripts
+// Set Layouts middleware to automatically wrap views in a layout and configure default layout
+app.set("layout default", "default");
+app.set("layouts", path.join(__dirname, "src/views/layouts"));
 
-  // Add A + B tests
-  if (new Date().getSeconds() % 2 === 0) {
-    res.locals.scripts.push('<script src="/js/a-test.js"></script>');
-  } else {
-    res.locals.scripts.push('<script src="/js/b-test.js"></script>');
-  }
+// Configure static paths for the Express application
 
-  if (req.devModeEnabled) {
-    res.locals.scripts.push(`
-          <script>
-        const ws = new WebSocket("ws://localhost:${parseInt(port) + 1}");
-        ws.onclose = () => {
-            setTimeout(() => location.reload(), 2000);
-        };
-    </script>`);
-  }
-  next();
-});
+app.use("/", baseRoute);
 
-// Global middleware to set a custom header
-app.use((req, res, next) => {
-  res.setHeader("X-Powered-By", "Express and Duct Tape");
-  next();
-});
-
-// Home page
-app.get("/", (req, res) => {
-  const timestamp = req.timestamp;
-  const title = "Home Page";
-  const content = `
-        <h1>Welcome to the Home Page</h1>
-        <p>You requested this page at: ${timestamp}</p>
-    `;
-  res.render("index", { title, content });
-});
-
-// About page
-app.get("/about", (req, res) => {
-  const title = "About Page";
-  const content = "<h1>Welcome to the About Page</h1>";
-  res.render("index", { title, content });
-});
-
-// Contact page
-app.get("/contact", (req, res) => {
-  const title = "Contact Page";
-  const content = "<h1>Welcome to the Contact Page</h1>";
-  res.render("index", { title, content });
-});
-
-// ID validation middleware
-const validateId = (req, res, next) => {
-  const { id } = req.params;
-  if (isNaN(id)) {
-    const error = new Error("Invalid ID: must be a number.");
-    error.status = 400;
-    next(error);
-    return;
-  }
-  next();
-};
-
-// Middleware to validate name
-const validateName = (req, res, next) => {
-  const { name } = req.params;
-  if (!/^[a-zA-Z]+$/.test(name)) {
-    const error = new Error("Invalid name: must only contain letters.");
-    error.status = 400;
-    next(error);
-    return;
-  }
-  next();
-};
-
-// Account page route with ID and name validation
-app.get("/account/:name/:id", validateName, validateId, (req, res) => {
-  const title = "Account Page";
-  const { name, id } = req.params;
-  const isEven = id % 2 === 0 ? "even" : "odd";
-  const content = `
-        <h1>Welcome, ${name}!</h1>
-        <p>Your account ID is ${id}, which is an ${isEven} number.</p>
-    `;
-  res.render("index", { title, content });
-});
-
-// Handle 404 errors by passing an error
-app.use((req, res, next) => {
-  const error = new Error("Page Not Found");
-  error.status = 404;
-  next(error);
-});
-
-// Centralized error handler
-app.use((err, req, res, next) => {
-  const status = err.status || 500;
-  const context = { mode, port, error: err.message };
-  res.status(status);
-  switch (status) {
-    case 400:
-      context.title = "Bad Request";
-      res.render("400", context);
-      break;
-    case 404:
-      context.title = "Page Not Found";
-      res.render("400", context);
-      break;
-    default:
-      context.title = "Internal Server Error";
-      context.error = err.message;
-      res.render("500", context);
-  }
-});
+// Apply error handlers
+app.use(notFoundHandler);
+app.use(globalErrorHandler);
 
 // When in development mode, start a WebSocket server for live reloading
 if (mode.includes("dev")) {
@@ -149,7 +54,7 @@ if (mode.includes("dev")) {
     const wsServer = new ws.WebSocketServer({ port: wsPort });
 
     wsServer.on("listening", () => {
-      console.log(`WebSocket is running on http://localhost:${wsPort}`);
+      console.log(`WebSocket server is running on port ${wsPort}`);
     });
 
     wsServer.on("error", (error) => {
@@ -159,8 +64,8 @@ if (mode.includes("dev")) {
     console.error("Failed to start WebSocket server:", error);
   }
 }
-
-// Start the server and listen on the specified port
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+// Start the server on the specified port
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on http://127.0.0.1:${PORT}`);
 });
