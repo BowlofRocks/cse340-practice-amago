@@ -1,6 +1,9 @@
-const configMode = (req, res, next) => {
+import { getNav } from "../utils/index.js";
+
+const configMode = async (req, res, next) => {
   res.locals.scripts = res.locals.scripts || [];
   res.locals.styles = res.locals.styles || [];
+  res.locals.navHTML = await getNav();
 
   if (process.env.NODE_ENV === "development") {
     // Add livereload scripta

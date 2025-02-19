@@ -3,13 +3,16 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 // Import all other required modules: Route handlers, Middleware, etc.
+import categoryRoute from "./src/routes/category/index.js";
 import baseRoute from "./src/routes/index.js";
 import layouts from "./src/middleware/layouts.js";
 import configMode from "./src/middleware/config-mode.js";
+import configureStaticPaths from "./src/middleware/static-paths.js";
 import {
   notFoundHandler,
   globalErrorHandler,
 } from "./src/middleware/error-handler.js";
+import { setupDatabase } from "./src/database/index.js";
 
 // Get the current file path and directory name
 const __filename = fileURLToPath(import.meta.url);
@@ -22,24 +25,29 @@ const mode = process.env.MODE || "production";
 // Create an instance of an Express application
 const app = express();
 
-// WITH THIS:
-app.use("/css", express.static(path.join(__dirname, "public/css")));
-app.use("/js", express.static(path.join(__dirname, "public/js")));
-app.use("/images", express.static(path.join(__dirname, "public/images")));
+// Configure the application based on environment settings
+app.use(configMode);
+
+// Configure static paths for the Express application
+configureStaticPaths(app);
+
 // Set EJS as the view engine and record the location of the views directory
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "src/views"));
 
-app.use(configMode);
-app.use(layouts);
-
 // Set Layouts middleware to automatically wrap views in a layout and configure default layout
 app.set("layout default", "default");
 app.set("layouts", path.join(__dirname, "src/views/layouts"));
+app.use(layouts);
 
-// Configure static paths for the Express application
+// Middleware to parse JSON data in request body
+app.use(express.json());
+
+// Middleware to parse URL-encoded form data (like from a standard HTML form)
+app.use(express.urlencoded({ extended: true }));
 
 app.use("/", baseRoute);
+app.use("/category", categoryRoute);
 
 // Apply error handlers
 app.use(notFoundHandler);
@@ -66,6 +74,7 @@ if (mode.includes("dev")) {
 }
 // Start the server on the specified port
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  await setupDatabase();
   console.log(`Server running on http://127.0.0.1:${PORT}`);
 });
