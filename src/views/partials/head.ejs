@@ -1,14 +1,14 @@
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title><%= title %></title>
-  <link rel="stylesheet" href="/css/main.css" />
-
-  <% if (locals.styles && locals.styles.length) { %> <%
-  locals.styles.forEach((style) => { %> <%- style %> <% }); %> <% } %>
-</head>
-
-<body>
-  <% if (locals.scripts && locals.scripts.length) { %> <%
-  locals.scripts.forEach((script) => { %> <%- script %> <% }); %> <% } %>
-</body>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title><%= title %></title>
+<link rel="stylesheet" href="/css/main.css">
+<% if (styles && styles.length > 0) { %>
+    <% styles.forEach((style) => { %>
+        <%- style %>
+    <% }); %>
+<% } %>
+<% if (scripts && scripts.length > 0) { %>
+    <% scripts.forEach((script) => { %>
+        <%- script %>
+    <% }); %>
+<% } %>

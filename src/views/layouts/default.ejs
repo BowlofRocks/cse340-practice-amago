@@ -5,7 +5,14 @@
   </head>
   <body>
     <header><%- include('../partials/header') %></header>
-    <main><%- body %></main>
+    <main>
+      <div id="message-area">
+        <% if (flash) { %> <% flash.forEach((obj) => { %> <%-
+        include('../partials/flash', { type: obj.type, message: obj.message })
+        %> <% }); %> <% } %>
+      </div>
+      <%- body %>
+    </main>
     <footer><%- include('../partials/footer') %></footer>
   </body>
 </html>
