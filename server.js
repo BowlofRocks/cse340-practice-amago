@@ -1,144 +1,100 @@
-// Import express using ESM syntax
+// Import required modules using ESM import syntax
 import express from "express";
 import path from "path";
-import { dirname } from "path";
 import { fileURLToPath } from "url";
+import session from "express-session";
+import SQLiteStore from "connect-sqlite3";
+// Import all other required modules: Route handlers, Middleware, etc.
+import accountRoute from "./src/routes/account/index.js";
+import baseRoute from "./src/routes/index.js";
+import categoryRoute from "./src/routes/category/index.js";
+import configNodeEnv from "./src/middleware/node-env.js";
+import configureStaticPaths from "./src/middleware/static-paths.js";
+import fileUploads from "./src/middleware/file-uploads.js";
+import flashMessages from "./src/middleware/flash-messages.js";
+import gameRoute from "./src/routes/game/index.js";
+import layouts from "./src/middleware/layouts.js";
+import {
+  notFoundHandler,
+  globalErrorHandler,
+} from "./src/middleware/error-handler.js";
+import { setupDatabase } from "./src/database/index.js";
 
+// Get the current file path and directory name
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
-const mode = process.env.MODE || "production";
+// Start the server on the specified port
 const port = process.env.PORT || 3000;
+const mode = process.env.MODE || "production";
+
+// Configure the SQLite session store
+const SQLiteSessionStore = SQLiteStore(session);
 
 // Create an instance of an Express application
 const app = express();
 
-// Set the view engine to EJS
+// Configure the application based on environment settings
+app.use(configNodeEnv);
+
+// Configure session middleware
+app.use(
+  session({
+    store: new SQLiteSessionStore({
+      db: "db.sqlite", // SQLite database file
+      dir: "./src/database/", // Directory where the file is stored
+      concurrentDB: true, // Allows multiple processes to use the database
+    }),
+    secret: process.env.SESSION_SECRET || "default-secret",
+    resave: false, // Prevents re-saving sessions that have not changed
+    saveUninitialized: true, // Saves new sessions even if unmodified
+    name: "sessionId",
+    cookie: {
+      secure: false, // Set to `true` in production with HTTPS
+      httpOnly: true, // Prevents client-side access to the cookie
+    },
+  })
+);
+
+// Configure static paths for the Express application
+configureStaticPaths(app);
+
+// Middleware to handle flash messages
+app.use(flashMessages);
+
+// Set EJS as the view engine and record the location of the views directory
 app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "src/views"));
 
-// Register the 'public' directory to serve static files
-app.use(express.static(path.join(__dirname, "public")));
+// Set Layouts middleware to automatically wrap views in a layout and configure default layout
+app.set("layout default", "default");
+app.set("layouts", path.join(__dirname, "src/views/layouts"));
+app.use(layouts);
 
-// Global middleware to handle current mode (development or production)
-app.use((req, res, next) => {
-  req.devModeEnabled = mode.includes("dev"); // New helper property to check if in dev mode
-  res.locals.devModeWarning =
-    '<p class="dev-mode-msg">Warning: Development Mode Enabled</p>'; // Placeholder for a dev mode warning
-  res.locals.scripts = []; // Placeholder for front-end scripts
+// Middleware to process multipart form data with file uploads
+app.use(fileUploads);
 
-  // Add A + B tests
-  if (new Date().getSeconds() % 2 === 0) {
-    res.locals.scripts.push('<script src="/js/a-test.js"></script>');
-  } else {
-    res.locals.scripts.push('<script src="/js/b-test.js"></script>');
-  }
+// Middleware to parse JSON data in request body
+app.use(express.json());
 
-  if (req.devModeEnabled) {
-    res.locals.scripts.push(`
-          <script>
-        const ws = new WebSocket("ws://localhost:${parseInt(port) + 1}");
-        ws.onclose = () => {
-            setTimeout(() => location.reload(), 2000);
-        };
-    </script>`);
-  }
-  next();
-});
+// Middleware to parse URL-encoded form data (like from a standard HTML form)
+app.use(express.urlencoded({ extended: true }));
 
-// Global middleware to set a custom header
-app.use((req, res, next) => {
-  res.setHeader("X-Powered-By", "Express and Duct Tape");
-  next();
-});
+// Use the home route for the root URL
+app.use("/", baseRoute);
 
-// Home page
-app.get("/", (req, res) => {
-  const timestamp = req.timestamp;
-  const title = "Home Page";
-  const content = `
-        <h1>Welcome to the Home Page</h1>
-        <p>You requested this page at: ${timestamp}</p>
-    `;
-  res.render("index", { title, content });
-});
+// Handle routes specific to the games
+app.use("/game", gameRoute);
 
-// About page
-app.get("/about", (req, res) => {
-  const title = "About Page";
-  const content = "<h1>Welcome to the About Page</h1>";
-  res.render("index", { title, content });
-});
+// Handle routes specific to the categories
+app.use("/category", categoryRoute);
 
-// Contact page
-app.get("/contact", (req, res) => {
-  const title = "Contact Page";
-  const content = "<h1>Welcome to the Contact Page</h1>";
-  res.render("index", { title, content });
-});
+// Handle routes specific to the accountq
+app.use("/account", accountRoute);
 
-// ID validation middleware
-const validateId = (req, res, next) => {
-  const { id } = req.params;
-  if (isNaN(id)) {
-    const error = new Error("Invalid ID: must be a number.");
-    error.status = 400;
-    next(error);
-    return;
-  }
-  next();
-};
-
-// Middleware to validate name
-const validateName = (req, res, next) => {
-  const { name } = req.params;
-  if (!/^[a-zA-Z]+$/.test(name)) {
-    const error = new Error("Invalid name: must only contain letters.");
-    error.status = 400;
-    next(error);
-    return;
-  }
-  next();
-};
-
-// Account page route with ID and name validation
-app.get("/account/:name/:id", validateName, validateId, (req, res) => {
-  const title = "Account Page";
-  const { name, id } = req.params;
-  const isEven = id % 2 === 0 ? "even" : "odd";
-  const content = `
-        <h1>Welcome, ${name}!</h1>
-        <p>Your account ID is ${id}, which is an ${isEven} number.</p>
-    `;
-  res.render("index", { title, content });
-});
-
-// Handle 404 errors by passing an error
-app.use((req, res, next) => {
-  const error = new Error("Page Not Found");
-  error.status = 404;
-  next(error);
-});
-
-// Centralized error handler
-app.use((err, req, res, next) => {
-  const status = err.status || 500;
-  const context = { mode, port, error: err.message };
-  res.status(status);
-  switch (status) {
-    case 400:
-      context.title = "Bad Request";
-      res.render("400", context);
-      break;
-    case 404:
-      context.title = "Page Not Found";
-      res.render("400", context);
-      break;
-    default:
-      context.title = "Internal Server Error";
-      context.error = err.message;
-      res.render("500", context);
-  }
-});
+// Apply error handlers
+app.use(notFoundHandler);
+app.use(globalErrorHandler);
 
 // When in development mode, start a WebSocket server for live reloading
 if (mode.includes("dev")) {
@@ -149,7 +105,7 @@ if (mode.includes("dev")) {
     const wsServer = new ws.WebSocketServer({ port: wsPort });
 
     wsServer.on("listening", () => {
-      console.log(`WebSocket is running on http://localhost:${wsPort}`);
+      console.log(`WebSocket server is running on port ${wsPort}`);
     });
 
     wsServer.on("error", (error) => {
@@ -160,7 +116,10 @@ if (mode.includes("dev")) {
   }
 }
 
-// Start the server and listen on the specified port
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+// Start the Express server
+app.listen(port, async () => {
+  // Ensure the database is setup
+  await setupDatabase();
+
+  console.log(`Server running on http://127.0.0.1:${port}`);
 });
